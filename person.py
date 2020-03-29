@@ -8,7 +8,7 @@ from copy import deepcopy as copy
 _rand = lambda x: np.random.random() if x is None else x
 
 def _get_factors(f):
-    _attributes = ['loc', 'transmission_rate', 'movement_speed', 'recovery_rate', 'death_rate']
+    _attributes = ['loc', 'transmission_rate', 'movement_speed', 'recovery_rate', 'death_rate', 'max_infection_length']
     _states = ['infected', 'recovered', 'dead']
 
     for key in f.keys():
@@ -20,6 +20,7 @@ def _get_factors(f):
     f['movement_speed'] = 0.01
     f['recovery_rate'] = 0.01
     f['death_rate'] = 0.001
+    f['max_infection_length'] = 50
 
     for key in _states:
         f[key] = False
@@ -35,17 +36,19 @@ class Person:
         for key,val in kwargs.items():
             setattr(self, key, val)
 
-        # Defines the current journey:
-        self._src = copy(self.loc)
-        self._aim = None
+        # Incremented during recovery attempt:
+        self._t_since_infection = 0
 
     def attempt_recovery(self, r=None):
         if self.dead or not self.infected:
             return
 
+        self._t_since_infection += 1
+        time_factor = 1.0 + self._t_since_infection / self.max_infection_length
+
         r = _rand(r)
 
-        if r < self.recovery_rate:
+        if r < (self.recovery_rate * time_factor):
             self.infected = False
             self.recovered = True
             self.dead = False
@@ -71,42 +74,21 @@ class Person:
         if r < self.transmission_rate * self.world.encounter(self, other):
             other.infected = True
 
-    def attempt_move(self, r=None):
+    def attempt_move(self, rx=None, ry=None):
         ''' Returns True if the person has reached their aim.
         '''
 
-        if self.dead or self._aim is None:
-            return
-
-        r = _rand(r)
-        
-        dx = self._aim[0] - self._src[0]
-        dy = self._aim[1] - self._src[1]
-
-        dx *= self.movement_speed / self.world.size_factor
-        dy *= self.movement_speed / self.world.size_factor
-
-        if self.loc[0] < self._aim[0]:
-            self.loc[0] = max(self.loc[0]+dx, self._aim[0])
-        else:
-            self.loc[0] = min(self.loc[0]+dx, self._aim[0])
-
-        if self.loc[1] < self._aim[1]:
-            self.loc[1] = max(self.loc[1]+dy, self._aim[1])
-        else:
-            self.loc[1] = min(self.loc[1]+dy, self._aim[1])
-
-        return np.allclose(self.loc, self._aim)
-
-    def set_aim(self, aim=None):
         if self.dead:
             return
 
-        if aim is None:
-            aim = [_rand(None), _rand(None)]
+        rx = _rand(rx)
+        ry = _rand(ry)
+        
+        dx = 2.0 * (rx - 0.5) * self.movement_speed / self.world.size_factor
+        dy = 2.0 * (ry - 0.5) * self.movement_speed / self.world.size_factor
 
-        self._src = copy(self.loc)
-        self._aim = aim
+        self.loc[0] += dx
+        self.loc[1] += dy
 
     def move(self, loc):
         self.loc = loc
@@ -115,4 +97,16 @@ class Person:
         dx = self.loc[0] - other.loc[0]
         dy = self.loc[1] - other.loc[1]
         return np.sqrt(dx*dx + dy*dy)
+
+    @property
+    def status(self):
+        if self.dead:
+            return 'dead'
+        elif self.infected:
+            return 'infected'
+        elif self.recovered:
+            return 'recovered'
+        else:
+            return 'healthy'
+
 
