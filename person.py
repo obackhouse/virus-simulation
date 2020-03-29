@@ -20,7 +20,7 @@ def _get_factors(f):
     f['movement_speed'] = 0.01
     f['recovery_rate'] = 0.01
     f['death_rate'] = 0.001
-    f['max_infection_length'] = 50
+    f['max_infection_length'] = 25
 
     for key in _states:
         f[key] = False
@@ -52,6 +52,9 @@ class Person:
             self.infected = False
             self.recovered = True
             self.dead = False
+            return True
+        else:
+            return False
 
     def attempt_death(self, r=None):
         if self.dead or not self.infected:
@@ -63,6 +66,9 @@ class Person:
             self.infected = False
             self.recovered = False
             self.dead = True
+            return True
+        else:
+            return False
 
     def attempt_transmission(self, other, r=None):
         if self.dead or not self.infected or other.dead or other.infected or other.recovered:
@@ -73,11 +79,11 @@ class Person:
         # FIXME: do these need to be independent random numbers?
         if r < self.transmission_rate * self.world.encounter(self, other):
             other.infected = True
+            return True
+        else:
+            return False
 
     def attempt_move(self, rx=None, ry=None):
-        ''' Returns True if the person has reached their aim.
-        '''
-
         if self.dead:
             return
 
@@ -89,6 +95,11 @@ class Person:
 
         self.loc[0] += dx
         self.loc[1] += dy
+
+        self.loc[0] = max(min(self.loc[0], 1.0), 0.0)
+        self.loc[1] = max(min(self.loc[1], 1.0), 0.0)
+
+        return True
 
     def move(self, loc):
         self.loc = loc

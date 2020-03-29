@@ -3,11 +3,21 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from matplotlib.animation import FuncAnimation
+from matplotlib.lines import Line2D
+
+plt.style.use(['seaborn'])
+plt.rc('font', family='serif')
+plt.rc('figure.subplot', left=0.05, right=0.95, bottom=0.1, 
+                         top=0.95, wspace=0.1, hspace=0.1)
 
 
-_default_colors = { 'infected': 'r', 'healthy': 'b', 'recovered': '0.5', 'dead': '0.2' }
-_default_markers = { 'infected': 'o', 'healthy': 'o', 'recovered': 'o', 'dead': 'x' }
+_default_colors = { 'infected': 'r', 'healthy': 'b', 'recovered': '0.5', 'dead': 'k' }
+_default_colors = { 'infected': '#df1e05', 'healthy': '#1166f4', 'recovered': '0.5', 'dead': 'k' }
+_default_markers = { 'infected': 'o', 'healthy': 'o', 'recovered': 'o', 'dead': 'X' }
+_default_markersize = { 'infected': 3, 'healthy': 3, 'recovered': 3, 'dead': 5 }
+_default_zorder = {'infected': 2, 'healthy': 2, 'recovered': 1, 'dead': 1 }
 _keys = ['infected', 'healthy', 'recovered', 'dead']
 
 
@@ -57,21 +67,36 @@ class Simulation:
         ''' Animates the simulation.
         '''
 
-        fig = plt.figure(figsize=kwargs.get('figsize', (8,4)))
-        ax1 = fig.add_subplot(121)
-        ax2 = fig.add_subplot(122)
+        fig = plt.figure(figsize=kwargs.get('figsize', (12,4)))
+        grid = fig.add_gridspec(1, 3)
+        ax1 = fig.add_subplot(grid[0,0])
+        ax2 = fig.add_subplot(grid[0,1:])
+
+        ax1.set_xticks([])
+        ax1.set_yticks([])
+        ax2.set_xticks([])
+        ax2.set_yticks([])
+
+        ax2.set_xlabel(r'time $\rightarrow$')
 
         left = []
         right = []
 
         colors = _default_colors.copy()
         markers = _default_markers.copy()
+        markersize = _default_markersize.copy()
+        zorder = _default_zorder.copy()
 
         colors.update(kwargs.get('colors', {}))
         markers.update(kwargs.get('markers', {}))
+
+        box = ax2.get_position()
+        ax2.set_position([box.x0, box.y0, box.width * 0.85, box.height])
+        patches = [mpatches.Patch(color=colors[key], label=key) for key in _keys]
+        ax2.legend(handles=patches, loc='center left', bbox_to_anchor=(1, 0.5))
         
         for key in _keys:
-            plot, = ax1.plot([], [], markers[key], color=colors[key], markersize=kwargs.get('markersize', 3))
+            plot, = ax1.plot([], [], markers[key], color=colors[key], markersize=markersize[key], zorder=zorder[key])
             left.append(plot)
 
             plot, = ax2.plot([], [], '-', color=colors[key])
@@ -102,13 +127,14 @@ class Simulation:
                     right[i].set_data(times, stack[i,:t+1])
 
             if kwargs.get('stack_plot', True):
+                ax2.collections.clear()
                 right[:] = ax2.stackplot(times, stack[:,:t+1], colors=[colors[k] for k in _keys])
 
             ax2.set_xlim(0, max(t, 1))
 
             return (*left, *right)
 
-        anim = FuncAnimation(fig, update, frames=self._run(timesteps=timesteps), blit=True)
+        anim = FuncAnimation(fig, update, blit=True, interval=0, frames=self._run(timesteps=timesteps))
         plt.show()
 
     def count_healthy(self):

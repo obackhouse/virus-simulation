@@ -5,7 +5,7 @@ import numpy as np
 
 
 class World:
-    def __init__(self, size_factor=10, locality_factor=3):
+    def __init__(self, size_factor=10, locality_factor=5):
         self.size_factor = size_factor
         self.locality_factor = locality_factor
 

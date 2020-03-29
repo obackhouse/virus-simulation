@@ -1,4 +1,5 @@
-- Poles in world - more like to stay, avoid, etc.
+- Poles in world - more likely to stay, avoid, etc.
 - Social distancing factor
 - Periodic boundary conditions?
 - Crossing between worlds?
+- Hospital with capacity - higher fatality rate when full
