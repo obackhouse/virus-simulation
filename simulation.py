@@ -18,54 +18,43 @@ _default_colors = { 'infected': '#df1e05', 'healthy': '#1166f4', 'recovered': '0
 _default_markers = { 'infected': 'o', 'healthy': 'o', 'recovered': 'o', 'dead': 'X' }
 _default_markersize = { 'infected': 3, 'healthy': 3, 'recovered': 3, 'dead': 5 }
 _default_zorder = {'infected': 2, 'healthy': 2, 'recovered': 1, 'dead': 1 }
-_keys = ['infected', 'healthy', 'recovered', 'dead']
 
 
 class Simulation:
-    def __init__(self, world, people):
+    def __init__(self, world, batch_size=100):
         self.world = world
-        self.people = people
+        self.batch_size = batch_size
 
         self.t = 0
-
-    def check_input(self):
-        if not sum([person.infected for person in people]):
-            raise ValueError('At least one person must be infected '
-                             'to start with!')
 
     def timestep(self):
         ''' Performs a timestep.
         '''
 
-        for i,p1 in enumerate(self.people):
-            p1.attempt_move()
-            
-            for j,p2 in enumerate(self.people):
-                if i == j:
-                    continue
-                p1.attempt_transmission(p2)
+        self.world.attempt_move()
 
-            # FIXME: swapping these could change things?
-            p1.attempt_death()
-            p1.attempt_recovery()
+        for start in range(0, self.world.pop, self.batch_size):
+            stop = min(start + self.batch_size, self.world.pop)
+            mask = np.zeros((self.world.pop), dtype=bool)
+            mask[start:stop] = True
 
-    def run(self, timesteps=10000, animate=True, **kwargs):
+            self.world.attempt_transmission(mask=mask)
+            self.world.attempt_death(mask=mask)
+            self.world.attempt_recovery(mask=mask)
+
+    def run(self, **kwargs):
         ''' Runs the simulation.
         '''
 
-        if animate:
-            yield from self.animate(**kwargs)
-        else:
-            yield from self._run(timesteps=timesteps)
-
-    def _run(self, timesteps=10000):
-        for self.t in range(timesteps):
+        for self.t in range(kwargs.get('timesteps', 10000)):
             self.timestep()
             yield self
 
-    def animate(self, timesteps=10000, **kwargs):
+    def animate(self, **kwargs):
         ''' Animates the simulation.
         '''
+
+        keys = ['infected', 'healthy', 'recovered', 'dead']
 
         fig = plt.figure(figsize=kwargs.get('figsize', (12,4)))
         grid = fig.add_gridspec(1, 3)
@@ -92,33 +81,32 @@ class Simulation:
 
         box = ax2.get_position()
         ax2.set_position([box.x0, box.y0, box.width * 0.85, box.height])
-        patches = [mpatches.Patch(color=colors[key], label=key) for key in _keys]
+        patches = [mpatches.Patch(color=colors[key], label=key) for key in keys]
         ax2.legend(handles=patches, loc='center left', bbox_to_anchor=(1, 0.5))
         
-        for key in _keys:
+        for key in keys:
             plot, = ax1.plot([], [], markers[key], color=colors[key], markersize=markersize[key], zorder=zorder[key])
             left.append(plot)
 
             plot, = ax2.plot([], [], '-', color=colors[key])
             right.append(plot)
 
-        loc = np.zeros((2, len(self.people)))
-        status = np.zeros((len(self.people),), dtype=object)
-        stack = np.zeros((4, timesteps))
+        loc = self.world.loc.copy()
+        status = self.world.status.copy()
+        stack = np.zeros((4, kwargs.get('timesteps', 10000))
 
         ax1.set_xlim(0, 1)
         ax1.set_ylim(0, 1)
-        ax2.set_ylim(0, len(self.people))
+        ax2.set_ylim(0, self.world.population)
 
         def update(self):
             t = self.t
             times = np.arange(t + 1)
 
-            for i,person in enumerate(self.people):
-                loc[:,i] = person.loc
-                status[i] = person.status
+            loc = self.world.loc.copy()
+            status = self.world.status.copy()
 
-            for i,key in enumerate(_keys):
+            for i,key in enumerate(keys):
                 mask = status == key
                 stack[i,t] = np.sum(mask)
                 left[i].set_data(loc[0][mask], loc[1][mask])
@@ -128,43 +116,37 @@ class Simulation:
 
             if kwargs.get('stack_plot', True):
                 ax2.collections.clear()
-                right[:] = ax2.stackplot(times, stack[:,:t+1], colors=[colors[k] for k in _keys])
+                right[:] = ax2.stackplot(times, stack[:,:t+1], colors=[colors[k] for k in keys])
 
             ax2.set_xlim(0, max(t, 1))
 
             return (*left, *right)
 
-        anim = FuncAnimation(fig, update, blit=True, interval=0, frames=self._run(timesteps=timesteps))
+        anim = FuncAnimation(fig, update, blit=True, interval=kwargs.get('interval', 100), frames=self.run(**kwargs), repeat=False)
         plt.show()
 
     def count_healthy(self):
-        return sum([not p.dead and not p.infected for p in self.people])
+        return np.sum(self.world.healthy)
 
     def count_infected(self):
-        return sum([not p.dead and p.infected for p in self.people])
+        return np.sum(self.world.infected)
 
     def count_recovered(self):
-        return sum([p.recovered for p in self.people])
+        return np.sum(self.world.recovered)
 
     def count_dead(self):
-        return sum([p.dead for p in self.people])
+        return np.sum(self.world.dead)
 
     def count_alive(self):
-        return sum([not p.dead for p in self.people])
+        return self.world.pop - self.count_dead()
 
     def count_all(self):
-        cts = { 'healthy': 0,
-                'infected': 0,
-                'recovered': 0,
-                'dead': 0,
-                'alive': 0,
+        cts = {
+            'healthy': self.count_healthy(),
+            'infected': self.count_infected(),
+            'recovered': self.count_recovered(),
+            'dead': self.count_dead(),
+            'alive': self.count_alive(),
         }
-
-        for p in self.people:
-            cts['healthy'] += not p.dead and not p.infected
-            cts['infected'] += not p.dead and p.infected
-            cts['recovered'] += p.recovered
-            cts['dead'] += p.dead
-            cts['alive'] += not p.dead
 
         return cts
