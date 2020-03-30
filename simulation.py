@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.animation import FuncAnimation
 from matplotlib.lines import Line2D
+import log
 
 plt.style.use(['seaborn'])
 plt.rc('font', family='serif')
@@ -21,9 +22,13 @@ _default_zorder = {'infected': 2, 'healthy': 2, 'recovered': 1, 'dead': 1 }
 
 
 class Simulation:
-    def __init__(self, world, batch_size=100):
+    def __init__(self, world, batch_size=100, log_file=None):
         self.world = world
         self.batch_size = batch_size
+        self.log_file = log_file
+
+        if isinstance(self.log_file, str):
+            self.log_file = log.Log(self.log_file)
 
         self.t = 0
 
@@ -38,9 +43,12 @@ class Simulation:
             mask = np.zeros((self.world.pop), dtype=bool)
             mask[start:stop] = True
 
-            self.world.attempt_transmission(mask=mask)
-            self.world.attempt_death(mask=mask)
-            self.world.attempt_recovery(mask=mask)
+            self.world.attempt_transmission(mask=mask, log_file=self.log_file)
+            self.world.attempt_death(mask=mask, log_file=self.log_file)
+            self.world.attempt_recovery(mask=mask, log_file=self.log_file)
+
+        if self.log_file is not None:
+            self.log_file.t += 1
 
     def run(self, **kwargs):
         ''' Runs the simulation.
@@ -49,6 +57,9 @@ class Simulation:
         for self.t in range(kwargs.get('timesteps', 10000)):
             self.timestep()
             yield self
+
+        if self.log_file is not None:
+            self.log_file.finalise()
 
     def animate(self, **kwargs):
         ''' Animates the simulation.
@@ -93,7 +104,7 @@ class Simulation:
 
         loc = self.world.loc.copy()
         status = self.world.status.copy()
-        stack = np.zeros((4, kwargs.get('timesteps', 10000))
+        stack = np.zeros((4, kwargs.get('timesteps', 10000)))
 
         ax1.set_xlim(0, 1)
         ax1.set_ylim(0, 1)
@@ -124,6 +135,9 @@ class Simulation:
 
         anim = FuncAnimation(fig, update, blit=True, interval=kwargs.get('interval', 100), frames=self.run(**kwargs), repeat=False)
         plt.show()
+
+        if self.log_file is not None:
+            self.log_file.finalise()
 
     def count_healthy(self):
         return np.sum(self.world.healthy)

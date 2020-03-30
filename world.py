@@ -2,17 +2,18 @@
 '''
 
 import numpy as np
+import log
 
 
 _defaults = {
     'population': 1000,
-    'transmission_rate': 0.001,
+    'transmission_rate': 0.01,
     'movement_speed' : 0.01,
     'recovery_rate': 0.01,
     'death_rate': 0.001,
     'max_infection_time': 25,
     'social_distance': 0.05,
-    'locality_factor': 7,
+    'locality_factor': 25,
 }
 _status_ref = np.asarray(['healthy', 'infected', 'recovered', 'dead'], dtype=object)
 
@@ -30,7 +31,7 @@ class World:
         self._status = np.zeros((self.pop), dtype=int)
         self._t_since_infection = np.zeros((self.pop))
 
-    def encounter(self, mask_a=None, mask_b=None):
+    def encounter(self, mask_a=None, mask_b=None, func='exp'):
         ''' Returns a matrix of probabilities that each pair of persons
             will have a successful encounter.
         '''
@@ -45,14 +46,17 @@ class World:
         d = np.sqrt((xa[:,None] - xb[None,:])**2 + (ya[:,None] - yb[None,:])**2)
         d /= np.sqrt(2)
 
-        p = (1 - d) ** self.locality_factor
+        if func == 'exp':
+            p = np.exp(-self.locality_factor * d)
+        elif func == 'pow':
+            p = (1 - d) ** self.locality_factor
 
         return p
 
     def spawn(self):
         self._status[0] = 1
 
-    def attempt_recovery(self, mask=None):
+    def attempt_recovery(self, mask=None, log_file=None):
         mask = self._full_mask if mask is None else mask
         do = self.infected
         do[~mask] = False
@@ -65,9 +69,14 @@ class World:
         mask = self._null_mask
         mask[do] = r < (self.recovery_rate * tfac)
 
+        if log_file is not None:
+            for i in range(self.pop):
+                if mask[i]:
+                    log_file.recovered(i)
+
         np.place(self._status, mask, 2)
 
-    def attempt_death(self, mask=None):
+    def attempt_death(self, mask=None, log_file=None):
         mask = self._full_mask if mask is None else mask
         do = self.infected
         do[~mask] = False
@@ -77,9 +86,14 @@ class World:
         mask = self._null_mask
         mask[do] = r < self.death_rate
 
+        if log_file is not None:
+            for i in range(self.pop):
+                if mask[i]:
+                    log_file.died(i)
+
         np.place(self._status, mask, 3)
 
-    def attempt_transmission(self, mask=None):
+    def attempt_transmission(self, mask=None, log_file=None):
         mask = self._full_mask if mask is None else mask
         do = self.infected
         do[~mask] = False
@@ -88,10 +102,21 @@ class World:
 
         r = np.random.random((np.sum(do), self.pop))
 
-        mask = r < (self.encounter(do) * self.transmission_rate)
-        mask = np.any(mask, axis=0)
+        mask = np.zeros((self.pop, self.pop), dtype=bool)
+        mask[do] = r < (self.encounter(do) * self.transmission_rate)
+        fmask = np.any(mask, axis=0)
 
-        np.place(self._status, np.logical_and(to, mask), 1)
+        if log_file:
+            for j in range(self.pop):
+                if fmask[j]:
+                    for i in range(self.pop):
+                        if i != j:
+                            if mask[i,j]:
+                                d = self.get_distance(i, j)
+                                log_file.infected(i, j, d)
+                                break
+
+        np.place(self._status, np.logical_and(to, fmask), 1)
 
     def attempt_move(self, mask=None):
         do = ~self.dead
@@ -112,6 +137,9 @@ class World:
     def get_rand(self, mask=slice(None)):
         n = self._status[mask].shape
         return np.random.random(n)
+
+    def get_distance(self, i, j):
+        return np.linalg.norm(self.loc[:,i] - self.loc[:,j])
 
     @property
     def pop(self):

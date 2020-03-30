@@ -1,6 +1,6 @@
-import world2, simulation2
+import world, simulation
 
-world = world2.World()
-world.spawn()
-sim = simulation2.Simulation(world)
+w = world.World()
+w.spawn()
+sim = simulation.Simulation(w, log_file='log.dat')
 sim.animate()
