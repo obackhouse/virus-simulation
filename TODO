@@ -1,8 +1,5 @@
-- Change movement to be the same step but in a random direction?
-- Have movement direction weighted to previous vector - give people general aims when moving
 - Poles in world - more likely to stay, avoid, etc.
 - Social distancing factor
-- Periodic boundary conditions?
 - Crossing between worlds?
 - Add text/info to plot and maybe status messages
 - Hospital with capacity - higher fatality rate when full

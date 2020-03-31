@@ -8,7 +8,9 @@ import log
 _defaults = {
     'population': 1000,
     'transmission_rate': 0.01,
-    'movement_speed' : 0.01,
+    'movement_speed': 0.01,
+    'movement_turn_rate': 4.0,
+    'periodic_boundary_conditions': True,
     'recovery_rate': 0.01,
     'death_rate': 0.002,
     'max_infection_time': 25,
@@ -30,6 +32,7 @@ class World:
         self.locations = np.random.random((2, self.pop))
         self._status = np.zeros((self.pop), dtype=int)
         self._t_since_infection = np.zeros((self.pop))
+        self._vec_prev = None
 
     def encounter(self, mask_a=None, mask_b=None, func='exp'):
         ''' Returns a matrix of probabilities that each pair of persons
@@ -121,18 +124,29 @@ class World:
     def attempt_move(self, mask=None):
         do = ~self.dead
 
-        rx = self.get_rand(do)
-        ry = self.get_rand(do)
+        if self._vec_prev is None:
+            rx = 2 * (self.get_rand(do) - 0.5) 
+            ry = 2 * (self.get_rand(do) - 0.5)
+            r = np.stack([rx, ry])
+        else:
+            r = self._vec_prev[:,do] + np.random.normal(scale=self.movement_turn_rate, size=(2, np.sum(do)))
 
-        mfac = self.movement_speed
+        r /= np.linalg.norm(r, axis=0)
+        d = r * self.movement_speed
 
-        dx = 2.0 * (rx - 0.5) * mfac
-        dy = 2.0 * (ry - 0.5) * mfac
-        d = np.stack((dx, dy))
+        if self._vec_prev is None:
+            self._vec_prev = r.copy()
+        else:
+            self._vec_prev[:,do] = r.copy()
 
         self.locations[:,do] += d
-        self.locations[self.loc < 0] = 0
-        self.locations[self.loc > 1] = 1
+
+        if self.periodic_boundary_conditions:
+            self.locations[self.loc < 0] += 1
+            self.locations[self.loc > 1] -= 1
+        else:
+            self.locations[self.loc < 0] = 0
+            self.locations[self.loc > 1] = 1
 
     def get_rand(self, mask=slice(None)):
         n = self._status[mask].shape
