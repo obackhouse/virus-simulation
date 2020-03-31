@@ -1,6 +1,5 @@
 import world, simulation
 
 w = world.World()
-w.spawn()
 sim = simulation.Simulation(w, log_file='log.dat')
-sim.animate()
+sim.animate(timesteps=1000, batch_size=100)

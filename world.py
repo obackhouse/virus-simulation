@@ -10,7 +10,7 @@ _defaults = {
     'transmission_rate': 0.01,
     'movement_speed' : 0.01,
     'recovery_rate': 0.01,
-    'death_rate': 0.001,
+    'death_rate': 0.002,
     'max_infection_time': 25,
     'social_distance': 0.05,
     'locality_factor': 25,

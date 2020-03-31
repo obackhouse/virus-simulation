@@ -54,6 +54,9 @@ class Simulation:
         ''' Runs the simulation.
         '''
 
+        if not self.count_infected():
+            self.world.spawn()
+
         for self.t in range(kwargs.get('timesteps', 10000)):
             self.timestep()
             yield self
@@ -135,9 +138,6 @@ class Simulation:
 
         anim = FuncAnimation(fig, update, blit=True, interval=kwargs.get('interval', 100), frames=self.run(**kwargs), repeat=False)
         plt.show()
-
-        if self.log_file is not None:
-            self.log_file.finalise()
 
     def count_healthy(self):
         return np.sum(self.world.healthy)
