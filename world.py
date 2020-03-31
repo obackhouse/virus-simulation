@@ -8,8 +8,8 @@ import log
 _defaults = {
     'population': 1000,
     'transmission_rate': 0.01,
-    'movement_speed': 0.01,
-    'movement_turn_rate': 4.0,
+    'movement_speed': 0.005,
+    'movement_turn_rate': 0.2,
     'periodic_boundary_conditions': True,
     'recovery_rate': 0.01,
     'death_rate': 0.002,
@@ -32,22 +32,14 @@ class World:
         self.locations = np.random.random((2, self.pop))
         self._status = np.zeros((self.pop), dtype=int)
         self._t_since_infection = np.zeros((self.pop))
-        self._vec_prev = None
+        self._vectors = 2 * (np.random.random((2, self.pop)) - 0.5)
 
     def encounter(self, mask_a=None, mask_b=None, func='exp'):
         ''' Returns a matrix of probabilities that each pair of persons
             will have a successful encounter.
         '''
 
-        mask_a = self._full_mask if mask_a is None else mask_a
-        mask_b = self._full_mask if mask_b is None else mask_b
-
-        x, y = self.loc
-        xa, xb = x[mask_a], x[mask_b]
-        ya, yb = y[mask_a], y[mask_b]
-        
-        d = np.sqrt((xa[:,None] - xb[None,:])**2 + (ya[:,None] - yb[None,:])**2)
-        d /= np.sqrt(2)
+        d = self.get_distances(mask_a=mask_a, mask_b=mask_b)
 
         if func == 'exp':
             p = np.exp(-self.locality_factor * d)
@@ -124,23 +116,23 @@ class World:
     def attempt_move(self, mask=None):
         do = ~self.dead
 
-        if self._vec_prev is None:
-            rx = 2 * (self.get_rand(do) - 0.5) 
-            ry = 2 * (self.get_rand(do) - 0.5)
-            r = np.stack([rx, ry])
-        else:
-            r = self._vec_prev[:,do] + np.random.normal(scale=self.movement_turn_rate, size=(2, np.sum(do)))
-
+        # Take the last vector and add noise
+        r = self._vectors[:,do]
+        r += np.random.normal(scale=self.movement_turn_rate, size=(2, np.sum(do)))
         r /= np.linalg.norm(r, axis=0)
+
         d = r * self.movement_speed
 
-        if self._vec_prev is None:
-            self._vec_prev = r.copy()
-        else:
-            self._vec_prev[:,do] = r.copy()
+        self._vectors[:,do] = r
 
+        # Apply social distancing force:
+        #dist = self.get_distances(mask_a=mask)
+        #force = (1 / (dist + 1e-20)) ** np.log10(self.social_distance)
+
+        # Move people:
         self.locations[:,do] += d
 
+        # Apply boundary conditions:
         if self.periodic_boundary_conditions:
             self.locations[self.loc < 0] += 1
             self.locations[self.loc > 1] -= 1
@@ -154,6 +146,16 @@ class World:
 
     def get_distance(self, i, j):
         return np.linalg.norm(self.loc[:,i] - self.loc[:,j])
+
+    def get_distances(self, mask_a=None, mask_b=None):
+        mask_a = self._full_mask if mask_a is None else mask_a
+        mask_b = self._full_mask if mask_b is None else mask_b
+
+        d = self.loc[:,mask_a][:,:,None] - self.loc[:,mask_b][:,None,:]
+        d = np.linalg.norm(d, axis=0)
+        d /= np.sqrt(2)
+
+        return d
 
     @property
     def pop(self):
